@@ -1,0 +1,57 @@
+name: Xamvn Forum Automation Bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      thread_id:
+        description: 'Thread ID hoặc URL chủ đề cần bình luận'
+        required: false
+        default: '307074'
+      message:
+        description: 'Nội dung bình luận cần đăng'
+        required: false
+        default: 'Bài tập thực hành tự động hoá từ GitHub Actions'
+      offline_only:
+        description: 'Chỉ chạy kiểm thử offline từ các file HTML'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🧪 Run Offline HTML Parsing Test
+        run: |
+          python xamvn_bot.py --offline
+
+      - name: 🚀 Run Automation Bot (Live)
+        if: ${{ !inputs.offline_only }}
+        env:
+          XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME }}
+          XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD }}
+          XAMVN_THREAD_ID: ${{ inputs.thread_id }}
+          XAMVN_MESSAGE: ${{ inputs.message }}
+        run: |
+          if [ -z "$XAMVN_USERNAME" ] || [ -z "$XAMVN_PASSWORD" ]; then
+            echo "⚠️ CẢNH BÁO: Chưa cấu hình Secrets XAMVN_USERNAME và XAMVN_PASSWORD trên GitHub Repo."
+            echo "Vui lòng vào Settings -> Secrets and variables -> Actions để thêm secrets."
+            echo "Kiểm thử offline đã hoàn thành thành công."
+            exit 0
+          fi
+          python xamvn_bot.py --no-cache -v

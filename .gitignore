@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C & build artifacts
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Configuration & Secrets (CRITICAL: Do NOT commit credentials)
+.env
+.env.*
+!.env.example
+account
+account.*
+html/account
+*.account
+credentials.*
+secrets.*
+
+# Session Caches & Cookies
+.session.json
+*.session.json
+cookies.json
+*.cookie
+posted_links.json
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
