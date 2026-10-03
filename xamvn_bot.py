@@ -144,9 +144,7 @@ class LinkManager:
                 link = item.strip()
 
             if link and link not in self.history:
-                # 1 con số random gồm 10 chữ cái
-                rand_str = ''.join(random.choices(string.ascii_letters, k=10))
-                comment_text = f"{link}\n{rand_str}"
+                comment_text = link
                 return comment_text, link, idx
 
         # Đã đăng hết link hoặc không còn link mới

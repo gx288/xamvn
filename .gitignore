@@ -31,7 +31,6 @@ secrets.*
 *.session.json
 cookies.json
 *.cookie
-posted_links.json
 
 # Testing & Coverage
 .pytest_cache/
