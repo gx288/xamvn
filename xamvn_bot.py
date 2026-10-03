@@ -78,18 +78,43 @@ def send_telegram_alert(message: str) -> bool:
     return False
 
 
+def extract_video_id(url_or_item: Any) -> Optional[str]:
+    """Trích xuất ID video từ URL hoặc item dict"""
+    if not url_or_item:
+        return None
+    url = url_or_item
+    if isinstance(url_or_item, dict):
+        url = url_or_item.get("video_url") or url_or_item.get("thumb_url") or url_or_item.get("page_link")
+    if not isinstance(url, str):
+        return None
+    try:
+        path = urllib.parse.urlparse(url).path
+    except Exception:
+        path = url
+    base = os.path.basename(path)
+    if not base:
+        return None
+    name, _ = os.path.splitext(base)
+    name = re.sub(r'\.(?:fr|th|md)$', '', name, flags=re.IGNORECASE)
+    return name or None
+
+
 class LinkManager:
-    """Quản lý danh sách link comment, chống trùng lặp và sinh nội dung ngẫu nhiên"""
+    """Quản lý danh sách link comment, chống trùng lặp và tự động căn chỉnh vị trí theo ID"""
     def __init__(
         self,
         data_file: str,
         history_file: str = "posted_links.json",
         start_index: int = 100,
+        last_posted_id: Optional[str] = None,
+        last_posted_url: Optional[str] = None,
         fallback_message: str = "up"
     ):
         self.data_file = data_file
         self.history_file = history_file
         self.start_index = max(0, int(start_index))
+        self.last_posted_id = last_posted_id
+        self.last_posted_url = last_posted_url
         self.fallback_message = fallback_message
         self.history = self._load_history()
 
@@ -116,24 +141,62 @@ class LinkManager:
         except Exception:
             pass
 
-    def get_next_comment(self) -> Tuple[str, Optional[str], Optional[int]]:
+    def get_next_comment(self) -> Tuple[str, Optional[str], Optional[int], Optional[str]]:
         """
         Lấy nội dung comment tiếp theo.
-        Trả về (nội dung comment, link đã chọn, index của link)
-        Định dạng: {link}\n{10_chu_cai_random}
-        Nếu hết link hoặc file không hợp lệ: trả về (fallback_message, None, None)
+        Trả về (nội dung comment, link đã chọn, index của link, video_id của link)
+        Nếu hết link hoặc file không hợp lệ: trả về (fallback_message, None, None, None)
         """
         if not os.path.isfile(self.data_file):
-            return self.fallback_message, None, None
+            return self.fallback_message, None, None, None
 
         try:
             with open(self.data_file, "r", encoding="utf-8") as f:
                 items = json.load(f)
         except Exception:
-            return self.fallback_message, None, None
+            return self.fallback_message, None, None, None
 
-        if not isinstance(items, list):
-            return self.fallback_message, None, None
+        if not isinstance(items, list) or not items:
+            return self.fallback_message, None, None, None
+
+        # Kiểm tra và tự động căn chỉnh vị trí (re-align) nếu có last_posted_id hoặc last_posted_url
+        target_id = self.last_posted_id
+        target_url = self.last_posted_url
+
+        if target_id or target_url:
+            matched_idx = None
+            # 1. Kiểm tra nhanh tại vị trí ngay trước start_index (start_index - 1)
+            prev_idx = self.start_index - 1
+            if 0 <= prev_idx < len(items):
+                item_prev = items[prev_idx]
+                item_link = None
+                if isinstance(item_prev, dict):
+                    item_link = item_prev.get("video_url") or item_prev.get("page_link") or item_prev.get("thumb_url")
+                elif isinstance(item_prev, str):
+                    item_link = item_prev.strip()
+                item_id = extract_video_id(item_prev)
+
+                if (target_id and item_id == target_id) or (target_url and item_link == target_url):
+                    matched_idx = prev_idx
+
+            # 2. Nếu vị trí start_index - 1 không khớp, tìm kiếm toàn bộ danh sách để căn chỉnh lại
+            if matched_idx is None:
+                for idx, item in enumerate(items):
+                    item_link = None
+                    if isinstance(item, dict):
+                        item_link = item.get("video_url") or item.get("page_link") or item.get("thumb_url")
+                    elif isinstance(item, str):
+                        item_link = item.strip()
+                    item_id = extract_video_id(item)
+
+                    if (target_id and item_id == target_id) or (target_url and item_link == target_url):
+                        matched_idx = idx
+                        break
+
+                if matched_idx is not None:
+                    old_start = self.start_index
+                    self.start_index = matched_idx + 1
+                    print(f"[{time.strftime('%H:%M:%S')}] 🔄 [AUTO-ALIGN] Tìm thấy video đã đăng gần nhất (ID: '{target_id or 'N/A'}', URL: '{target_url or 'N/A'}') tại index {matched_idx}. Tự động điều chỉnh start_index: {old_start} -> {self.start_index}")
 
         # Bắt đầu duyệt từ vị trí start_index
         for idx in range(self.start_index, len(items)):
@@ -145,11 +208,13 @@ class LinkManager:
                 link = item.strip()
 
             if link and link not in self.history:
+                vid_id = extract_video_id(item)
                 comment_text = link
-                return comment_text, link, idx
+                return comment_text, link, idx, vid_id
 
         # Đã đăng hết link hoặc không còn link mới
-        return self.fallback_message, None, None
+        return self.fallback_message, None, None, None
+
 
 
 class XamvnBot:
@@ -585,6 +650,24 @@ class XamvnBot:
         else:
             self.log("[WARN] Không tìm thấy file account hoặc không đọc được tài khoản", "WARN")
 
+        # 4. Kiểm tra LinkManager và data file nếu có
+        cfg = load_config_file("config.json")
+        data_file = cfg.get("data_file", "data/videos_likes.json")
+        if os.path.isfile(data_file):
+            self.log(f"Đang kiểm tra data_file: {data_file}")
+            lm = LinkManager(
+                data_file=data_file,
+                history_file=cfg.get("history_file", "posted_links.json"),
+                start_index=cfg.get("start_index", 266),
+                last_posted_id=cfg.get("last_posted_id"),
+                last_posted_url=cfg.get("last_posted_url")
+            )
+            msg, link, idx, vid_id = lm.get_next_comment()
+            if link:
+                self.log(f"[PASS] LinkManager hoạt động tốt: Next Index={idx}, ID={vid_id}, Link={link}", "SUCCESS")
+            else:
+                self.log(f"[WARN] LinkManager không tìm thấy link kế tiếp (sử dụng fallback: {msg})", "WARN")
+
         self.log(f"Kết quả kiểm thử offline: {'HOÀN TOÀN ĐẠT' if all_ok else 'CÓ LỖI'}", "SUCCESS" if all_ok else "ERROR")
         return all_ok
 
@@ -625,17 +708,31 @@ def load_config_file(config_path: str = "config.json") -> Dict[str, Any]:
     return {}
 
 
-def update_config_start_index(config_path: str, new_index: int):
-    """Cập nhật start_index mới vào file config.json để lưu tiến độ tự động"""
+def update_config_progress(
+    config_path: str,
+    new_index: int,
+    video_id: Optional[str] = None,
+    video_url: Optional[str] = None
+):
+    """Cập nhật start_index, last_posted_id, last_posted_url mới vào file config.json để lưu tiến độ tự động"""
     if os.path.isfile(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             cfg["start_index"] = new_index
+            if video_id:
+                cfg["last_posted_id"] = video_id
+            if video_url:
+                cfg["last_posted_url"] = video_url
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"⚠️ Không thể cập nhật tiến độ vào {config_path}: {e}")
+
+
+def update_config_start_index(config_path: str, new_index: int):
+    """Hàm tương thích cũ - gọi update_config_progress"""
+    update_config_progress(config_path, new_index)
 
 
 def check_and_update_redirect(cfg: Dict[str, Any], config_path: str = "config.json") -> Dict[str, Any]:
@@ -787,8 +884,10 @@ def main():
     )
 
     # 3. Quản lý link và cấu hình lặp
-    data_file = cfg.get("data_file", "D:/AT/github/viet69/anhmoe/videos_data.json")
+    data_file = cfg.get("data_file", "data/videos_likes.json")
     start_index = cfg.get("start_index", 100)
+    last_posted_id = cfg.get("last_posted_id")
+    last_posted_url = cfg.get("last_posted_url")
     history_file = cfg.get("history_file", "posted_links.json")
     fallback_message = cfg.get("fallback_message", "Up")
     configured_msg = args.message or os.getenv("XAMVN_MESSAGE") or cfg.get("default_message")
@@ -801,6 +900,8 @@ def main():
         data_file=data_file,
         history_file=history_file,
         start_index=start_index,
+        last_posted_id=last_posted_id,
+        last_posted_url=last_posted_url,
         fallback_message=fallback_message
     )
 
@@ -817,13 +918,14 @@ def main():
 
         chosen_link = None
         chosen_idx = None
+        chosen_id = None
 
         if configured_msg:
             current_message = configured_msg
         else:
-            current_message, chosen_link, chosen_idx = link_mgr.get_next_comment()
+            current_message, chosen_link, chosen_idx, chosen_id = link_mgr.get_next_comment()
             if chosen_link:
-                bot.log(f"Đã chọn link từ data_file (Dòng/Index #{chosen_idx}): {chosen_link}")
+                bot.log(f"Đã chọn link từ data_file (Dòng/Index #{chosen_idx}, ID: {chosen_id or 'N/A'}): {chosen_link}")
             else:
                 bot.log(f"Dữ liệu link đã dùng hết hoặc không khả dụng. Sử dụng tin nhắn fallback: \"{current_message}\"", "WARN")
 
@@ -836,8 +938,8 @@ def main():
                 link_mgr.record_posted(chosen_link)
                 bot.log(f"Đã lưu link vào lịch sử {history_file} (Tổng số link đã đăng: {len(link_mgr.history)})", "SUCCESS")
                 if chosen_idx is not None and args.config:
-                    update_config_start_index(args.config, chosen_idx + 1)
-                    bot.log(f"Đã cập nhật tiến độ start_index = {chosen_idx + 1} vào {args.config}", "SUCCESS")
+                    update_config_progress(args.config, chosen_idx + 1, chosen_id, chosen_link)
+                    bot.log(f"Đã cập nhật tiến độ vào {args.config} (start_index={chosen_idx + 1}, id={chosen_id or 'N/A'})", "SUCCESS")
 
             bot.log("=" * 65)
             bot.log(f"LẦN ĐĂNG #{post_count} THÀNH CÔNG!", "SUCCESS")
@@ -845,6 +947,7 @@ def main():
 
             if args.notify_tele:
                 post_url = f"https://xamvn.lifestyle/posts/{post_id}/" if post_id else f"https://xamvn.lifestyle/threads/{thread_target}/"
+                id_info = f"• Video ID: {chosen_id} (Index #{chosen_idx})\n" if chosen_id else ""
                 tele_msg = (
                     f"🚀 [XAMVN BOT - BÁO CÁO THỰC THI]\n\n"
                     f"✅ Đăng bình luận thành công (Lần #{post_count})!\n"
@@ -852,6 +955,7 @@ def main():
                     f"• Chủ đề: {thread_target}\n"
                     f"• Post ID: {post_id or 'N/A'}\n"
                     f"• Link bài: {post_url}\n"
+                    f"{id_info}"
                     f"📝 Nội dung bình luận: {current_message}\n\n"
                     f"⏰ Thời gian: {time.strftime('%Y-%m-%d %H:%M:%S')}"
                 )
