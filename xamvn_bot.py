@@ -18,7 +18,6 @@ Tính năng nổi bật:
 - Tự động fallback: nếu hết link sẽ tự động bình luận "up".
 - Quản lý phiên thông minh (Session Cache): lưu cookie xf_user, xf_session để tránh đăng nhập lại liên tục.
 - Tự động nhận diện & xử lý Anti-flood: nếu diễn đàn yêu cầu "chờ X giây", bot tự đếm ngược và thử lại.
-- Báo cáo kết quả qua Telegram (Saved Messages).
 """
 
 import os
@@ -57,25 +56,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
-
-
-def send_telegram_alert(message: str) -> bool:
-    """Gửi thông báo kết quả qua Telegram Saved Messages"""
-    tele_script = r"C:\Users\HungNhan\.gemini\config\telegram\send_telegram.py"
-    if os.path.isfile(tele_script):
-        try:
-            res = subprocess.run(
-                [sys.executable, tele_script, "-m", message],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="ignore",
-                timeout=30
-            )
-            return res.returncode == 0
-        except Exception:
-            return False
-    return False
 
 
 def extract_video_id(url_or_item: Any) -> Optional[str]:
@@ -689,7 +669,6 @@ def parse_args():
     parser.add_argument("--base-url", default="https://xamvn.lifestyle", help="URL diễn đàn (mặc định: https://xamvn.lifestyle)")
     parser.add_argument("--offline", action="store_true", help="Chạy chế độ kiểm thử offline với các file HTML có sẵn")
     parser.add_argument("--no-cache", action="store_true", help="Không sử dụng session cache cũ")
-    parser.add_argument("--notify-tele", action="store_true", default=True, help="Báo cáo kết quả qua Telegram (mặc định bật)")
     parser.add_argument("--loop", action="store_true", help="Chạy lặp lại định kỳ (theo interval_seconds)")
     parser.add_argument("--interval", type=int, help="Thời gian chờ giữa các lần đăng (giây, mặc định 300s = 5 phút)")
     parser.add_argument("--count", type=int, default=0, help="Số lần đăng tối đa trong vòng lặp (0 = vô tận, 1 = 1 lần)")
@@ -889,7 +868,7 @@ def main():
     last_posted_id = cfg.get("last_posted_id")
     last_posted_url = cfg.get("last_posted_url")
     history_file = cfg.get("history_file", "posted_links.json")
-    fallback_message = cfg.get("fallback_message", "Up")
+    fallback_message = cfg.get("fallback_message", "up")
     configured_msg = args.message or os.getenv("XAMVN_MESSAGE") or cfg.get("default_message")
 
     interval_sec = args.interval or cfg.get("interval_seconds", 300)
@@ -944,26 +923,6 @@ def main():
             bot.log("=" * 65)
             bot.log(f"LẦN ĐĂNG #{post_count} THÀNH CÔNG!", "SUCCESS")
             bot.log("=" * 65)
-
-            if args.notify_tele:
-                post_url = f"https://xamvn.lifestyle/posts/{post_id}/" if post_id else f"https://xamvn.lifestyle/threads/{thread_target}/"
-                id_info = f"• Video ID: {chosen_id} (Index #{chosen_idx})\n" if chosen_id else ""
-                tele_msg = (
-                    f"🚀 [XAMVN BOT - BÁO CÁO THỰC THI]\n\n"
-                    f"✅ Đăng bình luận thành công (Lần #{post_count})!\n"
-                    f"• Tài khoản: {username}\n"
-                    f"• Chủ đề: {thread_target}\n"
-                    f"• Post ID: {post_id or 'N/A'}\n"
-                    f"• Link bài: {post_url}\n"
-                    f"{id_info}"
-                    f"📝 Nội dung bình luận: {current_message}\n\n"
-                    f"⏰ Thời gian: {time.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
-                bot.log("Đang gửi thông báo kết quả tới Telegram (@hungleDKH)...")
-                if send_telegram_alert(tele_msg):
-                    bot.log("Đã gửi thông báo Telegram thành công!", "SUCCESS")
-                else:
-                    bot.log("Gửi thông báo Telegram không thành công.", "WARN")
 
             write_github_summary(
                 f"Lần #{post_count} - Kết quả chạy Bot",
