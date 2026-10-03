@@ -1,6 +1,11 @@
 name: Xamvn Forum Automation Bot
 
 on:
+  schedule:
+    # 18:15, 19:15, 20:15, 21:15, 22:15, 23:15, 00:15 giờ Việt Nam (UTC+7)
+    # Tương ứng 11:15 đến 17:15 UTC mỗi ngày (khoảng 7 lần/ngày)
+    - cron: '15 11-17 * * *'
+
   workflow_dispatch:
     inputs:
       thread_id:
@@ -8,7 +13,7 @@ on:
         required: false
         default: ''
       message:
-        description: 'Nội dung bình luận cần đăng (để trống sẽ tự lấy từ data_file theo config.json)'
+        description: 'Nội dung bình luận cần đăng (để trống sẽ tự lấy link từ data_file theo config.json)'
         required: false
         default: ''
       offline_only:
@@ -16,6 +21,9 @@ on:
         required: false
         type: boolean
         default: false
+
+permissions:
+  contents: write
 
 jobs:
   run-bot:
@@ -54,4 +62,18 @@ jobs:
             echo "Kiểm thử offline đã hoàn thành thành công."
             exit 0
           fi
+          # Chạy 1 lần đăng cho mỗi khung giờ tự động
           python xamvn_bot.py --count 1 --no-cache -v
+
+      - name: 💾 Save progress (config.json)
+        if: ${{ !inputs.offline_only }}
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add config.json
+          if git diff --staged --quiet; then
+            echo "Không có thay đổi tiến độ."
+          else
+            git commit -m "chore(bot): update start_index progress [skip ci]"
+            git push
+          fi

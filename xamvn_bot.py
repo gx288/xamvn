@@ -626,6 +626,19 @@ def load_config_file(config_path: str = "config.json") -> Dict[str, Any]:
     return {}
 
 
+def update_config_start_index(config_path: str, new_index: int):
+    """Cập nhật start_index mới vào file config.json để lưu tiến độ tự động"""
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            cfg["start_index"] = new_index
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Không thể cập nhật tiến độ vào {config_path}: {e}")
+
+
 def write_github_summary(title: str, content: str):
     """Ghi báo cáo ra GitHub Actions Step Summary nếu chạy trên CI"""
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
@@ -734,6 +747,9 @@ def main():
             if chosen_link:
                 link_mgr.record_posted(chosen_link)
                 bot.log(f"Đã lưu link vào lịch sử {history_file} (Tổng số link đã đăng: {len(link_mgr.history)})", "SUCCESS")
+                if chosen_idx is not None and args.config:
+                    update_config_start_index(args.config, chosen_idx + 1)
+                    bot.log(f"Đã cập nhật tiến độ start_index = {chosen_idx + 1} vào {args.config}", "SUCCESS")
 
             bot.log("=" * 65)
             bot.log(f"LẦN ĐĂNG #{post_count} THÀNH CÔNG!", "SUCCESS")

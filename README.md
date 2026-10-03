@@ -113,21 +113,20 @@ Script đã được cấu hình sẵn GitHub Actions tại `.github/workflows/x
    - `XAMVN_USERNAME`: Tên tài khoản / Email đăng nhập.
    - `XAMVN_PASSWORD`: Mật khẩu tài khoản.
 
-### Bước 2: Kích hoạt Workflow
-1. Vào tab **Actions** trên GitHub repository.
-2. Chọn workflow **Xamvn Forum Automation Bot**.
-3. Nhấn **Run workflow**:
-   - Nhập `thread_id` (mặc định: `307074`).
-   - Nhập `message` (nội dung bình luận).
-   - Nhấn nút xanh **Run workflow**.
-
-Quy trình sẽ tự động cài đặt môi trường, chạy kiểm thử offline và thực thi đăng bình luận trực tiếp, sau đó xuất kết quả vào **Job Summary**.
+### Bước 2: Lịch chạy tự động & Kích hoạt thủ công
+- **Lịch chạy tự động (Cron Schedule)**: Đã cấu hình chạy tự động theo **giờ Việt Nam (UTC+7)** vào các mốc:
+  - **18:15, 19:15, 20:15, 21:15, 22:15, 23:15, 00:15** (mỗi giờ 1 lần, tổng cộng **7 lần/ngày**).
+  - Mỗi lần chạy tự động sẽ lấy link video tiếp theo trong dataset, tự động cộng `start_index` trong `config.json` và commit lưu tiến độ lên repository bằng `[skip ci]`.
+- **Kích hoạt thủ công**:
+  1. Vào tab **Actions** trên GitHub repository.
+  2. Chọn workflow **Xamvn Forum Automation Bot**.
+  3. Nhấn **Run workflow** (có thể để trống để bot tự lấy theo `config.json`).
 
 ---
 
 ## 🛡️ Lưu ý về An toàn & Git
 
-- File `html/account` và `.session.json` đã được đưa vào `.gitignore`. 
+- File `html/account`, `.session.json` và `posted_links.json` đã được đưa vào `.gitignore`. 
 - **Tuyệt đối không dùng `git add -f html/account`** để tránh đẩy thông tin nhạy cảm lên GitHub.
 - Trước khi push, bạn có thể kiểm tra danh sách file sẽ commit bằng lệnh:
   ```bash
