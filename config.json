@@ -1,10 +1,9 @@
 {
   "thread_target": "https://xamvn.lifestyle/threads/307571/",
-  "default_message": "Up",
-  "interval_seconds": 300,
-  "loop": true,
+  "data_file": "data/videos_likes.json",
+  "start_index": 264,
+  "history_file": "posted_links.json",
   "fallback_message": "Up",
-  "data_file": "D:/AT/github/viet69/anhmoe/videos_data.json",
-  "start_index": 100,
-  "history_file": "posted_links.json"
+  "interval_seconds": 300,
+  "loop": true
 }

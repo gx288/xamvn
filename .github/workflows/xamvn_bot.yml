@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       thread_id:
-        description: 'Thread ID hoặc URL chủ đề cần bình luận'
+        description: 'Thread ID hoặc URL chủ đề cần bình luận (để trống sẽ lấy theo config.json)'
         required: false
-        default: '307074'
+        default: ''
       message:
-        description: 'Nội dung bình luận cần đăng'
+        description: 'Nội dung bình luận cần đăng (để trống sẽ tự lấy từ data_file theo config.json)'
         required: false
-        default: 'Bài tập thực hành tự động hoá từ GitHub Actions'
+        default: ''
       offline_only:
         description: 'Chỉ chạy kiểm thử offline từ các file HTML'
         required: false
@@ -54,4 +54,4 @@ jobs:
             echo "Kiểm thử offline đã hoàn thành thành công."
             exit 0
           fi
-          python xamvn_bot.py --no-cache -v
+          python xamvn_bot.py --count 1 --no-cache -v
