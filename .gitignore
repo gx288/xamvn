@@ -18,7 +18,6 @@ ENV/
 # Configuration & Secrets (CRITICAL: Do NOT commit credentials)
 .env
 .env.*
-!.env.example
 account
 account.*
 html/account

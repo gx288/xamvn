@@ -16,11 +16,6 @@ on:
         description: 'Nội dung bình luận cần đăng (để trống sẽ tự lấy link từ data_file theo config.json)'
         required: false
         default: ''
-      offline_only:
-        description: 'Chỉ chạy kiểm thử offline từ các file HTML'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -44,12 +39,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🧪 Run Offline HTML Parsing Test
-        run: |
-          python xamvn_bot.py --offline
-
       - name: 🚀 Run Automation Bot (Live)
-        if: ${{ !inputs.offline_only }}
         env:
           XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME }}
           XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD }}
@@ -59,14 +49,12 @@ jobs:
           if [ -z "$XAMVN_USERNAME" ] || [ -z "$XAMVN_PASSWORD" ]; then
             echo "⚠️ CẢNH BÁO: Chưa cấu hình Secrets XAMVN_USERNAME và XAMVN_PASSWORD trên GitHub Repo."
             echo "Vui lòng vào Settings -> Secrets and variables -> Actions để thêm secrets."
-            echo "Kiểm thử offline đã hoàn thành thành công."
-            exit 0
+            exit 1
           fi
           # Chạy 1 lần đăng cho mỗi khung giờ tự động
           python xamvn_bot.py --count 1 --no-cache -v
 
       - name: 💾 Save progress (config.json & posted_links.json)
-        if: ${{ !inputs.offline_only }}
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"

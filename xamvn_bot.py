@@ -13,7 +13,7 @@ Tính năng nổi bật:
   2. Biến môi trường / .env: XAMVN_USERNAME, XAMVN_PASSWORD
   3. File credentials: html/account hoặc account
 - Cấu hình qua config.json: thread mục tiêu, file data link, dòng bắt đầu (start_index), fallback message.
-- Trình quản lý link: lấy link theo thứ tự từ start_index, ghép kèm 1 chuỗi 10 ký tự ngẫu nhiên xuống dòng.
+- Trình quản lý link: lấy link theo thứ tự từ dataset, tự động căn chỉnh vị trí theo Video ID nếu dataset thay đổi.
 - Lịch sử đăng bài (posted_links.json): ghi nhớ các link đã đăng để không bao giờ đăng trùng.
 - Tự động fallback: nếu hết link sẽ tự động bình luận "up".
 - Quản lý phiên thông minh (Session Cache): lưu cookie xf_user, xf_session để tránh đăng nhập lại liên tục.
@@ -579,78 +579,6 @@ class XamvnBot:
 
         return False, None
 
-    # =========================================================================
-    # CHẾ ĐỘ KIỂM THỬ OFFLINE (HTML TEST)
-    # =========================================================================
-
-    def run_offline_test(self, html_dir: str = "html") -> bool:
-        """
-        Kiểm thử phân tích các file HTML có sẵn mà không cần kết nối mạng.
-        Đáp ứng yêu cầu 'trong thư mục xamvn đã có đủ html các trang'.
-        """
-        self.log("=== CHẠY CHẾ ĐỘ KIỂM THỬ OFFLINE TỪ CÁC FILE HTML ===", "INFO")
-        all_ok = True
-
-        login_file = os.path.join(html_dir, "login.html")
-        reply_file = os.path.join(html_dir, "reply.html")
-
-        # 1. Kiểm tra login.html
-        if os.path.isfile(login_file):
-            self.log(f"Đang kiểm tra phân tích DOM: {login_file}")
-            with open(login_file, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            csrf = self.extract_csrf_from_html(content)
-            if csrf:
-                self.log(f"[PASS] Đã trích xuất CSRF Token từ login.html: {csrf}", "SUCCESS")
-            else:
-                self.log("[FAIL] Không trích xuất được CSRF Token từ login.html", "ERROR")
-                all_ok = False
-        else:
-            self.log(f"Không tìm thấy file {login_file}", "WARN")
-
-        # 2. Kiểm tra reply.html
-        if os.path.isfile(reply_file):
-            self.log(f"Đang kiểm tra phân tích DOM: {reply_file}")
-            with open(reply_file, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            action, inputs = self.extract_reply_form_details(content)
-            if action and "add-reply" in action:
-                self.log(f"[PASS] Đã trích xuất Action URL: {action}", "SUCCESS")
-                self.log(f"[PASS] Đã trích xuất {len(inputs)} trường input ẩn bao gồm _xfToken", "SUCCESS")
-            else:
-                self.log("[FAIL] Không trích xuất được form reply từ reply.html", "ERROR")
-                all_ok = False
-        else:
-            self.log(f"Không tìm thấy file {reply_file}", "WARN")
-
-        # 3. Kiểm tra file account
-        user, pwd = self.load_credentials_from_file()
-        if user and pwd:
-            self.log(f"[PASS] Đã đọc thành công tài khoản: ID={user}, Pass={'*' * len(pwd)}", "SUCCESS")
-        else:
-            self.log("[WARN] Không tìm thấy file account hoặc không đọc được tài khoản", "WARN")
-
-        # 4. Kiểm tra LinkManager và data file nếu có
-        cfg = load_config_file("config.json")
-        data_file = cfg.get("data_file", "data/videos_likes.json")
-        if os.path.isfile(data_file):
-            self.log(f"Đang kiểm tra data_file: {data_file}")
-            lm = LinkManager(
-                data_file=data_file,
-                history_file=cfg.get("history_file", "posted_links.json"),
-                start_index=cfg.get("start_index", 266),
-                last_posted_id=cfg.get("last_posted_id"),
-                last_posted_url=cfg.get("last_posted_url")
-            )
-            msg, link, idx, vid_id = lm.get_next_comment()
-            if link:
-                self.log(f"[PASS] LinkManager hoạt động tốt: Next Index={idx}, ID={vid_id}, Link={link}", "SUCCESS")
-            else:
-                self.log(f"[WARN] LinkManager không tìm thấy link kế tiếp (sử dụng fallback: {msg})", "WARN")
-
-        self.log(f"Kết quả kiểm thử offline: {'HOÀN TOÀN ĐẠT' if all_ok else 'CÓ LỖI'}", "SUCCESS" if all_ok else "ERROR")
-        return all_ok
-
 
 # =============================================================================
 # CLI ENTRYPOINT
@@ -667,7 +595,6 @@ def parse_args():
     parser.add_argument("-m", "--message", help="Nội dung bình luận cần đăng (nếu bỏ qua sẽ tự lấy từ config hoặc data_file)")
     parser.add_argument("-a", "--account-file", help="Đường dẫn đến file account (mặc định tìm html/account)")
     parser.add_argument("--base-url", default="https://xamvn.lifestyle", help="URL diễn đàn (mặc định: https://xamvn.lifestyle)")
-    parser.add_argument("--offline", action="store_true", help="Chạy chế độ kiểm thử offline với các file HTML có sẵn")
     parser.add_argument("--no-cache", action="store_true", help="Không sử dụng session cache cũ")
     parser.add_argument("--loop", action="store_true", help="Chạy lặp lại định kỳ (theo interval_seconds)")
     parser.add_argument("--interval", type=int, help="Thời gian chờ giữa các lần đăng (giây, mặc định 300s = 5 phút)")
@@ -830,12 +757,6 @@ def main():
         use_cache=not args.no_cache,
         verbose=args.verbose
     )
-
-    # Chế độ kiểm thử offline từ các file HTML
-    if args.offline:
-        success = bot.run_offline_test()
-        write_github_summary("Kiểm thử Offline", f"Trạng thái: {'THÀNH CÔNG' if success else 'THẤT BẠI'}")
-        sys.exit(0 if success else 1)
 
     # 1. Xác định thông tin đăng nhập
     username = args.username or os.getenv("XAMVN_USERNAME")
