@@ -30,6 +30,7 @@ import string
 import random
 import argparse
 import subprocess
+import urllib.parse
 from typing import Optional, Tuple, Dict, Any, Set
 
 # Nạp dotenv nếu khả dụng
@@ -637,6 +638,89 @@ def update_config_start_index(config_path: str, new_index: int):
             print(f"⚠️ Không thể cập nhật tiến độ vào {config_path}: {e}")
 
 
+def check_and_update_redirect(cfg: Dict[str, Any], config_path: str = "config.json") -> Dict[str, Any]:
+    """
+    Kiểm tra chuyển hướng tên miền từ xamvn.link.
+    Nếu phát hiện tên miền mới đổi 3 lần liên tiếp thì ghi vào config.json và cập nhật base_url.
+    """
+    check_url = cfg.get("redirect_check_url", "https://xamvn.link")
+    current_base = cfg.get("base_url", "https://xamvn.lifestyle").rstrip("/")
+    pending_url = cfg.get("pending_redirect_url", "").rstrip("/")
+    redirect_count = cfg.get("redirect_count", 0)
+
+    print(f"[{time.strftime('%H:%M:%S')}] 🔍 Kiểm tra chuyển hướng tên miền tại: {check_url}")
+
+    detected_base = None
+    # Thử kết nối theo dõi redirect (hỗ trợ cả https và http)
+    targets = [check_url]
+    if check_url.startswith("https://"):
+        targets.append(check_url.replace("https://", "http://"))
+    elif check_url.startswith("http://"):
+        targets.append(check_url.replace("http://", "https://"))
+
+    for target in targets:
+        try:
+            if USE_CURL_CFFI:
+                r = curl_requests.get(target, impersonate="chrome120", allow_redirects=True, timeout=12)
+            else:
+                r = curl_requests.get(target, allow_redirects=True, timeout=12)
+
+            if r.status_code in (200, 301, 302, 303, 307, 308):
+                p = urllib.parse.urlparse(r.url)
+                if p.netloc and "xamvn" in p.netloc:
+                    detected_base = f"{p.scheme}://{p.netloc}".rstrip("/")
+                    break
+        except Exception:
+            continue
+
+    if not detected_base:
+        print(f"[{time.strftime('%H:%M:%S')}] ℹ️ Không phát hiện chuyển hướng mới từ {check_url}. Sử dụng base_url: {current_base}")
+        return cfg
+
+    clean_detected = detected_base.rstrip("/")
+    clean_current = current_base.rstrip("/")
+    config_changed = False
+
+    if clean_detected != clean_current:
+        print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Phát hiện tên miền đích mới: {clean_detected} (khác {clean_current})")
+        if clean_detected == pending_url:
+            redirect_count += 1
+            cfg["redirect_count"] = redirect_count
+            print(f"[{time.strftime('%H:%M:%S')}] 🔄 Đã phát hiện đổi tên miền {redirect_count}/3 lần liên tiếp.")
+        else:
+            cfg["pending_redirect_url"] = clean_detected
+            cfg["redirect_count"] = 1
+            print(f"[{time.strftime('%H:%M:%S')}] 👁️ Bắt đầu theo dõi tên miền mới: {clean_detected} (1/3 lần)")
+        config_changed = True
+
+        if cfg["redirect_count"] >= 3:
+            print(f"[{time.strftime('%H:%M:%S')}] 🚨 ĐÃ ĐẠT 3 LẦN ĐỔI TÊN MIỀN! Cập nhật BASE_URL chính thức thành: {clean_detected}")
+            cfg["base_url"] = clean_detected
+            cfg["pending_redirect_url"] = ""
+            cfg["redirect_count"] = 0
+
+            # Cập nhật thread_target nếu có thread_id
+            thread_id = cfg.get("thread_id") or "307571"
+            cfg["thread_target"] = f"{clean_detected}/threads/{thread_id}/"
+            config_changed = True
+    else:
+        # Nếu trùng khớp với base_url hiện tại thì reset bộ đếm theo dõi
+        if redirect_count > 0 or pending_url:
+            cfg["pending_redirect_url"] = ""
+            cfg["redirect_count"] = 0
+            config_changed = True
+
+    if config_changed and os.path.isfile(config_path):
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            print(f"[{time.strftime('%H:%M:%S')}] 💾 Đã lưu cấu hình redirect mới vào {config_path}")
+        except Exception as e:
+            print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Lỗi ghi file cấu hình: {e}")
+
+    return cfg
+
+
 def write_github_summary(title: str, content: str):
     """Ghi báo cáo ra GitHub Actions Step Summary nếu chạy trên CI"""
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
@@ -659,8 +743,14 @@ def main():
     # Đọc config.json
     cfg = load_config_file(args.config)
 
+    # Kiểm tra chuyển hướng tên miền từ xamvn.link
+    cfg = check_and_update_redirect(cfg, args.config)
+
+    # Xác định base_url linh hoạt từ config
+    base_url = args.base_url if args.base_url != "https://xamvn.lifestyle" else (cfg.get("base_url") or os.getenv("XAMVN_BASE_URL", "https://xamvn.lifestyle"))
+
     bot = XamvnBot(
-        base_url=args.base_url or os.getenv("XAMVN_BASE_URL", "https://xamvn.lifestyle"),
+        base_url=base_url,
         use_cache=not args.no_cache,
         verbose=args.verbose
     )
