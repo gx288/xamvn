@@ -4,7 +4,7 @@ on:
   schedule:
     # 18:15, 19:15, 20:15, 21:15, 22:15, 23:15, 00:15 giờ Việt Nam (UTC+7)
     # Tương ứng 11:15 đến 17:15 UTC mỗi ngày (khoảng 7 lần/ngày)
-    - cron: '15 11-17 * * *'
+    - cron: '12,22,32,42,52 * * * *'
 
   workflow_dispatch:
     inputs:
