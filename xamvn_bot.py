@@ -88,7 +88,8 @@ class LinkManager:
         start_index: int = 100,
         last_posted_id: Optional[str] = None,
         last_posted_url: Optional[str] = None,
-        fallback_message: str = "up"
+        fallback_message: str = "up",
+        comment_suffix: Optional[str] = None
     ):
         self.data_file = data_file
         self.history_file = history_file
@@ -96,6 +97,7 @@ class LinkManager:
         self.last_posted_id = last_posted_id
         self.last_posted_url = last_posted_url
         self.fallback_message = fallback_message
+        self.comment_suffix = comment_suffix
         self.history = self._load_history()
 
     def _load_history(self) -> Set[str]:
@@ -189,11 +191,18 @@ class LinkManager:
 
             if link and link not in self.history:
                 vid_id = extract_video_id(item)
-                comment_text = link
+                if self.comment_suffix:
+                    comment_text = f"{link}\n\n{self.comment_suffix}"
+                else:
+                    comment_text = link
                 return comment_text, link, idx, vid_id
 
         # Đã đăng hết link hoặc không còn link mới
-        return self.fallback_message, None, None, None
+        if self.comment_suffix:
+            fallback_text = f"{self.fallback_message}\n\n{self.comment_suffix}"
+        else:
+            fallback_text = self.fallback_message
+        return fallback_text, None, None, None
 
 
 
@@ -593,6 +602,7 @@ def parse_args():
     parser.add_argument("-p", "--password", help="Mật khẩu đăng nhập")
     parser.add_argument("-t", "--thread", help="ID hoặc URL của chủ đề cần bình luận")
     parser.add_argument("-m", "--message", help="Nội dung bình luận cần đăng (nếu bỏ qua sẽ tự lấy từ config hoặc data_file)")
+    parser.add_argument("-s", "--suffix", help="Đoạn văn bản/chữ ký đính kèm vào cuối mỗi bình luận")
     parser.add_argument("-a", "--account-file", help="Đường dẫn đến file account (mặc định tìm html/account)")
     parser.add_argument("--base-url", default="https://xamvn.lifestyle", help="URL diễn đàn (mặc định: https://xamvn.lifestyle)")
     parser.add_argument("--no-cache", action="store_true", help="Không sử dụng session cache cũ")
@@ -796,13 +806,24 @@ def main():
     is_loop = args.loop or cfg.get("loop", False)
     max_count = args.count or cfg.get("count", 0)
 
+    # Xác định comment suffix (nội dung bổ sung kèm theo mỗi comment)
+    if args.suffix is not None:
+        comment_suffix = args.suffix
+    elif "XAMVN_COMMENT_SUFFIX" in os.environ:
+        comment_suffix = os.getenv("XAMVN_COMMENT_SUFFIX")
+    elif "comment_suffix" in cfg:
+        comment_suffix = cfg.get("comment_suffix")
+    else:
+        comment_suffix = "ae có job nào về edit video, làm web, content, ads nào share t với nhé. dạo này đói quá. thanks"
+
     link_mgr = LinkManager(
         data_file=data_file,
         history_file=history_file,
         start_index=start_index,
         last_posted_id=last_posted_id,
         last_posted_url=last_posted_url,
-        fallback_message=fallback_message
+        fallback_message=fallback_message,
+        comment_suffix=comment_suffix
     )
 
     # 4. Đăng nhập một lần trước khi bắt đầu vòng lặp
@@ -822,6 +843,8 @@ def main():
 
         if configured_msg:
             current_message = configured_msg
+            if comment_suffix and comment_suffix not in current_message:
+                current_message = f"{current_message}\n\n{comment_suffix}"
         else:
             current_message, chosen_link, chosen_idx, chosen_id = link_mgr.get_next_comment()
             if chosen_link:
