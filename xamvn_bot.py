@@ -801,7 +801,10 @@ def main():
     mode = args.mode or os.getenv("XAMVN_MODE") or cfg.get("mode", "bump")
     bump_message = cfg.get("bump_message", "up lên")
     bump_limit = int(cfg.get("bump_limit", 10))
-    milestone_message = cfg.get("milestone_message", "Tạm dừng nhé. Còn nhiều nhưng thằng nào muốn xem tiếp thì inbox t")
+    milestone_message = cfg.get(
+        "milestone_message",
+        "Tạm dừng nhé. Còn nhiều nhưng thằng nào muốn xem tiếp thì inbox t\nCó web xịn xò cho mấy tml xem tê dái luôn\n[IMG size=\"430x960\"]https://xamvn.lifestyle/attachments/863527/[/IMG]"
+    )
     bump_count = int(cfg.get("bump_count", 0))
 
     data_file = cfg.get("data_file", "data/videos_likes.json")
