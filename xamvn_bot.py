@@ -593,6 +593,7 @@ def parse_args():
     parser.add_argument("-p", "--password", help="Mật khẩu đăng nhập")
     parser.add_argument("-t", "--thread", help="ID hoặc URL của chủ đề cần bình luận")
     parser.add_argument("-m", "--message", help="Nội dung bình luận cần đăng (nếu bỏ qua sẽ tự lấy từ config hoặc data_file)")
+    parser.add_argument("--mode", choices=["bump", "link"], help="Chế độ hoạt động: 'bump' (đăng 'up lên' & câu mốc) hoặc 'link' (lấy link video)")
     parser.add_argument("-a", "--account-file", help="Đường dẫn đến file account (mặc định tìm html/account)")
     parser.add_argument("--base-url", default="https://xamvn.lifestyle", help="URL diễn đàn (mặc định: https://xamvn.lifestyle)")
     parser.add_argument("--no-cache", action="store_true", help="Không sử dụng session cache cũ")
@@ -634,6 +635,19 @@ def update_config_progress(
                 json.dump(cfg, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"⚠️ Không thể cập nhật tiến độ vào {config_path}: {e}")
+
+
+def update_bump_progress(config_path: str, new_count: int):
+    """Cập nhật bump_count mới vào file config.json để lưu tiến độ chu kỳ bump"""
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            cfg["bump_count"] = new_count
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Không thể cập nhật bump_count vào {config_path}: {e}")
 
 
 def update_config_start_index(config_path: str, new_index: int):
@@ -783,7 +797,13 @@ def main():
         or "307571"
     )
 
-    # 3. Quản lý link và cấu hình lặp
+    # 3. Quản lý chế độ hoạt động và cấu hình lặp
+    mode = args.mode or os.getenv("XAMVN_MODE") or cfg.get("mode", "bump")
+    bump_message = cfg.get("bump_message", "up lên")
+    bump_limit = int(cfg.get("bump_limit", 10))
+    milestone_message = cfg.get("milestone_message", "Tạm dừng nhé. Còn nhiều nhưng thằng nào muốn xem tiếp thì inbox t")
+    bump_count = int(cfg.get("bump_count", 0))
+
     data_file = cfg.get("data_file", "data/videos_likes.json")
     start_index = cfg.get("start_index", 100)
     last_posted_id = cfg.get("last_posted_id")
@@ -819,9 +839,22 @@ def main():
         chosen_link = None
         chosen_idx = None
         chosen_id = None
+        is_bump_step = False
+        next_bump_count = None
 
         if configured_msg:
             current_message = configured_msg
+        elif mode == "bump":
+            if bump_count < bump_limit:
+                current_message = bump_message
+                is_bump_step = True
+                next_bump_count = bump_count + 1
+                bot.log(f"Chế độ Bump: Chuẩn bị đăng \"{current_message}\" (Lần {next_bump_count}/{bump_limit})")
+            else:
+                current_message = milestone_message
+                is_bump_step = False
+                next_bump_count = 0
+                bot.log(f"Chế độ Bump: Đã hoàn thành {bump_limit} lần \"{bump_message}\". Đăng câu tạm dừng: \"{current_message}\"")
         else:
             current_message, chosen_link, chosen_idx, chosen_id = link_mgr.get_next_comment()
             if chosen_link:
@@ -834,7 +867,16 @@ def main():
         reply_ok, post_id = bot.post_reply(thread_target, current_message)
 
         if reply_ok:
-            if chosen_link:
+            if mode == "bump" and not configured_msg:
+                bump_count = next_bump_count
+                cfg["bump_count"] = next_bump_count
+                if args.config:
+                    update_bump_progress(args.config, next_bump_count)
+                    if is_bump_step:
+                        bot.log(f"Đã lưu tiến độ bump_count={next_bump_count}/{bump_limit} vào {args.config}", "SUCCESS")
+                    else:
+                        bot.log(f"Đã đăng câu tạm dừng và reset bump_count=0 vào {args.config}", "SUCCESS")
+            elif chosen_link:
                 link_mgr.record_posted(chosen_link)
                 bot.log(f"Đã lưu link vào lịch sử {history_file} (Tổng số link đã đăng: {len(link_mgr.history)})", "SUCCESS")
                 if chosen_idx is not None and args.config:
