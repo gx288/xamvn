@@ -699,27 +699,20 @@ def check_and_update_redirect(cfg: Dict[str, Any], config_path: str = "config.js
     config_changed = False
 
     if clean_detected != clean_current:
-        print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Phát hiện tên miền đích mới: {clean_detected} (khác {clean_current})")
-        if clean_detected == pending_url:
-            redirect_count += 1
-            cfg["redirect_count"] = redirect_count
-            print(f"[{time.strftime('%H:%M:%S')}] 🔄 Đã phát hiện đổi tên miền {redirect_count}/3 lần liên tiếp.")
-        else:
-            cfg["pending_redirect_url"] = clean_detected
-            cfg["redirect_count"] = 1
-            print(f"[{time.strftime('%H:%M:%S')}] 👁️ Bắt đầu theo dõi tên miền mới: {clean_detected} (1/3 lần)")
+        print(f"[{time.strftime('%H:%M:%S')}] 🚨 Phát hiện tên miền mới từ {check_url}: {clean_detected} (thay thế {clean_current})")
+        cfg["base_url"] = clean_detected
+        cfg["pending_redirect_url"] = ""
+        cfg["redirect_count"] = 0
+
+        # Cập nhật thread_target nếu có thread_id
+        thread_id = cfg.get("thread_id") or "307571"
+        cfg["thread_target"] = f"{clean_detected}/threads/{thread_id}/"
+
+        # Cập nhật domain trong milestone_message nếu có
+        if "milestone_message" in cfg and clean_current in cfg["milestone_message"]:
+            cfg["milestone_message"] = cfg["milestone_message"].replace(clean_current, clean_detected)
+
         config_changed = True
-
-        if cfg["redirect_count"] >= 3:
-            print(f"[{time.strftime('%H:%M:%S')}] 🚨 ĐÃ ĐẠT 3 LẦN ĐỔI TÊN MIỀN! Cập nhật BASE_URL chính thức thành: {clean_detected}")
-            cfg["base_url"] = clean_detected
-            cfg["pending_redirect_url"] = ""
-            cfg["redirect_count"] = 0
-
-            # Cập nhật thread_target nếu có thread_id
-            thread_id = cfg.get("thread_id") or "307571"
-            cfg["thread_target"] = f"{clean_detected}/threads/{thread_id}/"
-            config_changed = True
     else:
         # Nếu trùng khớp với base_url hiện tại thì reset bộ đếm theo dõi
         if redirect_count > 0 or pending_url:
