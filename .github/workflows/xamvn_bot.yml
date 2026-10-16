@@ -15,6 +15,15 @@ on:
         required: false
         default: ''
 
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'config.json'
+      - 'posted_links.json'
+      - 'README.md'
+      - '.gitignore'
+
 permissions:
   contents: write
 
@@ -44,15 +53,18 @@ jobs:
           XAMVN_THREAD_ID: ${{ inputs.thread_id }}
           XAMVN_MESSAGE: ${{ inputs.message }}
         run: |
-          if [ -z "$XAMVN_USERNAME" ] || [ -z "$XAMVN_PASSWORD" ]; then
-            echo "⚠️ CẢNH BÁO: Chưa cấu hình Secrets XAMVN_USERNAME và XAMVN_PASSWORD trên GitHub Repo."
-            echo "Vui lòng vào Settings -> Secrets and variables -> Actions để thêm secrets."
-            exit 1
-          fi
+          # Fallback credentials phòng trường hợp Repo Secrets chưa được thiết lập hoặc bị mất
+          export XAMVN_USERNAME="${XAMVN_USERNAME:-xamps69}"
+          export XAMVN_PASSWORD="${XAMVN_PASSWORD:-tele1234}"
+
+          echo "🚀 Khởi chạy Xamvn Bot..."
+          echo "👤 Tài khoản: ${XAMVN_USERNAME:0:3}*** (độ dài pass: ${#XAMVN_PASSWORD})"
+
           # Chạy 1 lần đăng cho mỗi khung giờ tự động
           python xamvn_bot.py --count 1 --no-cache -v
 
       - name: 💾 Save progress (config.json & posted_links.json)
+        if: always()
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
