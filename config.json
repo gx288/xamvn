@@ -1,8 +1,8 @@
 {
   "base_url": "https://xamvn.lifestyle",
   "redirect_check_url": "https://xamvn.link",
-  "pending_redirect_url": "",
-  "redirect_count": 0,
+  "pending_redirect_url": "https://xamvn.yachts",
+  "redirect_count": 1,
   "thread_id": "307571",
   "thread_target": "https://xamvn.lifestyle/threads/307571/",
   "mode": "bump",
