@@ -796,7 +796,7 @@ def main():
     bump_limit = int(cfg.get("bump_limit", 10))
     milestone_message = cfg.get(
         "milestone_message",
-        "Tạm dừng nhé. Còn nhiều nhưng thằng nào muốn xem tiếp thì inbox t\nCó web xịn xò cho mấy tml xem tê dái luôn\n[IMG size=\"430x960\"]https://xamvn.lifestyle/attachments/863527/[/IMG]"
+        "thôi dừng nhé. t để web trên avatar nhé. tự vào mà xem nha mấy tml\n[IMG size=\"430x960\"]https://xamvn.yachts/attachments/863527/[/IMG]"
     )
     bump_count = int(cfg.get("bump_count", 0))
 
